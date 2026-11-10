@@ -72,6 +72,40 @@ private:
     // Clue: in sift_down, the right child may not exist: check
     // 2*i+2 < data_.size() before reading it. Swap with the SMALLER child.
 
+
+    // move data_[i] up while its smaller than its parent
+    void sift_up(std::size_t i){    
+        while(i > 0){
+            std::size_t parent = (i - 1) / 2;
+            if(!less_(data[i], data_[parent])){
+                break;
+            }
+            std::swap(data_[i], data_[parent]);
+            i = parent;
+        }
+    }
+
+    // move data_[i] down while it is larger than its smaller child
+    void sift_down(std::size_t i){
+        const std::size_t n = data_.size();
+        for(;;){
+            std::size_t left = 2 * i + 1;
+            if(left >= n){
+                break;
+            }
+            std::size_t smallest = left;
+            std::size_t right = left + 1;
+            if (right < n && less_(data_[right], data_[left])){
+                smallest = right;
+            }
+            if(!less_(data_[smallest], data_[i])){
+                break;
+            }
+            std::swap(data_[i], data_[smallest]);
+            i = smallest;
+        }
+    }
+
     std::vector<T> data_;
     Less           less_;
 };
