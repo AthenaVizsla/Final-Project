@@ -37,25 +37,33 @@ public:
         // Clue: compare with less_(a, b), never a < b. Some element types
         // (e.g. the provided memory_store.cpp's Scored struct) have no
         // operator<, and a min-heap of std::greater must still work.
-        (void)value;
+        data_.push_back(std::move(value));
+        sift_up(data_.size() - 1);
     }
 
     // The smallest element. Throws std::out_of_range if empty. O(1).
     const T& top() const {
-        // TODO
-        throw std::out_of_range("MinHeap::top not implemented");
+        if (data_.empty()){
+            throw std::out_of_range("MinHeap::top not implemented");
+        }
+        return data_[0];
     }
 
     // Removes and returns the smallest element. Throws std::out_of_range if
     // empty. O(log n).
     T pop() {
-        // TODO: save the root, move the last element to the root, shrink,
-        // sift down, return the saved root.
-        // Clue: check empty() first. With one element, there is no "last
-        // element" to move: just take it and pop_back().
-        // Clue: T result = std::move(data_[0]); then move the last element
-        // into slot 0 (moving avoids copying big strings).
-        throw std::out_of_range("MinHeap::pop not implemented");
+        if (data_.empty()){
+            throw std::out_of_range("MinHeap::pop on empty heap");
+        }
+        T result = std::move(data_[0]);
+        if (data_.size() > 1){
+            data_[0] = std::move(data_.back());
+        }
+        data_.pop_back();
+        if (!data_.empty()){
+            sift_down(0);
+        }
+        return result;
     }
 
     std::size_t size() const noexcept { return data_.size(); }
@@ -118,22 +126,23 @@ private:
 // space. Items that compare equal may come out in any order.
 template <typename T, typename Less = std::less<T>>
 std::vector<T> top_k(const std::vector<T>& items, std::size_t k, Less less = Less()) {
-    // TODO: keep a MinHeap<T, Less> of at most k items. For each item: if
-    // the heap has fewer than k items, push it; otherwise, if the heap's top
-    // is less than the item, pop the top and push the item. At the end, pop
-    // everything (smallest first) and return it reversed.
-    //
-    // Clues:
-    //  * k == 0: return {} BEFORE the loop (top() on an empty heap throws).
-    //  * Build the heap WITH the comparator:  MinHeap<T, Less> heap(less);
-    //    Writing  MinHeap<T, Less> heap;  fails for lambdas ("use of deleted
-    //    function ... lambda") because a lambda can't be default-constructed.
-    //  * "top is less than the item" means  less(heap.top(), item),  not
-    //    heap.top() < item.  Read less(a, b) as "a is WORSE than b": the heap
-    //    keeps the k best items with the worst of them on top.
-    //  * std::reverse (from <algorithm>) flips a vector.
-    (void)items;
-    (void)k;
-    (void)less;
-    return {};
+    if(k == 0 || items.empty()){
+        return {};
+    }
+    MinHeap<T, Less> heap(less);
+    for(const T& item : items){
+        if (heap.size() < k){
+            heap.push(item);
+        } else if (less(heap.top(), item)){
+            heap.pop();
+            heap.push(item);
+        }
+    }
+    std::vector<T> out;
+    out.reserve(heap.size());
+    while (!heap.empty()){
+        out.push_back(heap.pop());
+    }
+    std::reverse(out.begin(), out.end());
+    return out;
 }
