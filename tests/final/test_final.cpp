@@ -193,4 +193,17 @@ TEST(index_ranking_and_ties) {
 // Your tests (at least 12 more). Spec §8 lists what they must cover.
 // =========================================================================
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 int main(int argc, char** argv) { return mt::run_all(argc, argv); }

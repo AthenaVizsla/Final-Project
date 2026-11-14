@@ -49,13 +49,14 @@ public:
     //      pointer to its value (valid until the next put/erase/clear).
     // Miss: counts a miss and returns nullptr.
     const Value* get(const Key& key) {
-        // TODO
-        // Clue: look keys up with  auto it = map_.find(key);  and compare
-        // with map_.end(). Do NOT use map_[key] to look up: on a miss it
-        // INSERTS the key (with a nullptr node), size() grows, and a later
-        // put() crashes far away from the real bug.
-        (void)key;
-        return nullptr;
+        auto it = map_.find(key);
+        if (it == map_.end()){
+            ++stats_.misses;
+            return nullptr;
+        }
+        ++stats_.hits;
+        move_to_front(it->second);
+        return &it->second->value;
     }
 
     // Key present: replaces its value and marks it most recently used (no
@@ -76,12 +77,7 @@ public:
 
     // True if the key is cached. Does NOT change recency or stats.
     bool contains(const Key& key) const {
-        // TODO
-        // Clue: this function is const, so map_[key] does not even compile
-        // ("discards qualifiers"). Use map_.find(key) != map_.end() or
-        // map_.count(key).
-        (void)key;
-        return false;
+        return map_.find(key) != map_.end();
     }
 
     // Removes the key if present (not an eviction). Returns whether it was.
@@ -126,6 +122,44 @@ private:
     // a next, next->prev skips n, otherwise n was tail_ and tail_ moves to
     // n->prev. Unlinking the only node leaves head_ == tail_ == nullptr.
     // Spec Appendix B lists every pointer write.
+
+    // detach n from the list and fix the head and or tail
+    void unlink(Node* n){
+        if (n->prev != nullptr){
+            n->prev->next = n->next;
+        }else {
+            head_ = n->next;    // n was the head
+        }
+        if (n->next != nullptr){
+            n->next->prev = n->prev;
+        }else {
+            tail_ = n->prev;    // n was the tail
+        }
+        n->prev = n->next = nullptr;
+    }
+
+
+    // insert a deatached node at the front
+    void push_front(Node* n){
+        n->prev = nullptr;
+        n->next = head_;
+        if (head_ != nullptr){
+            head_->prev = n;
+        }
+        if (tail_ == nullptr){
+            tail_ = n;
+        }
+    }
+
+    // become head of list
+    void move_to_front(Node* n){
+        if (n == head_){
+            return;
+        }
+        unlink(n);
+        push_front(n);
+    }
+
 
     std::unordered_map<Key, Node*, Hash> map_;
     Node*       head_ = nullptr;
