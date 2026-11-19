@@ -44,6 +44,9 @@
 #include <utility>
 #include <vector>
 
+#include <algorithm>
+#include <random>
+
 // =========================================================================
 // Memory — 4 examples
 // =========================================================================
@@ -194,15 +197,72 @@ TEST(index_ranking_and_ties) {
 // =========================================================================
 
 
+// Heap tests
+TEST(heap_empty_throws_and_clear){
+    MinHeap<int> h;
+    CHECK(h.empty());
+    CHECK_THROWS(h.top(), std::out_of_range);
+    CHECK_THROWS(h.pop(), std::out_of_range);
+    h.push(3);
+    h.clear();
+    CHECK(h.empty());
+    CHECK_THROWS(h.pop(), std::out_of_range);
+}
 
+TEST(heap_custom_comparator_max_heap){
+    MinHeap<int, std::greater<int>> h;
+    for (int x : {2, 9, 4, 9, 1}){
+        h.push(x);
+    }
+    std::vector<int> got;
+    while (!h.empty()){
+        got.push_back(h.pop());
+    }
+    CHECK_EQ(got, (std::vector<int>{9,9,4,2,1}));
+}
 
+TEST(heap_top_k_edge_cases){
+    std::vector<int> v{5, 1, 9, 3, 7};
+    CHECK_EQ(top_k(v, 2), (std::vector<int>{9, 7}));
+    CHECK_EQ(top_k(v, 0), (std::vector<int>{}));
+    CHECK_EQ(top_k(v, 5), (std::vector<int>{9, 7, 5, 3, 1}));
+    CHECK_EQ(top_k(v, 50), (std::vector<int>{9, 7, 5, 3, 1}));   // k > n
+    CHECK_EQ(top_k(std::vector<int>{}, 3), (std::vector<int>{}));
+    auto greater = [](int a, int b) { return a > b; };
+    CHECK_EQ(top_k(v, 2, greater), (std::vector<int>{1, 3}));
+}
 
+TEST(heap_top_k_matches_full_sort_and_timing) {
+    std::mt19937 rng(12345);
+    std::vector<int> v(100000);
+    for (int& x : v) x = static_cast<int>(rng() % 1000000);
 
+    using clock = std::chrono::steady_clock;
+    auto t0 = clock::now();
+    std::vector<int> got = top_k(v, 10);
+    auto t1 = clock::now();
+    std::vector<int> sorted = v;
+    std::sort(sorted.begin(), sorted.end(), std::greater<int>());
+    auto t2 = clock::now();
+    sorted.resize(10);
+    CHECK_EQ(got, sorted);
 
+    double ms_heap = std::chrono::duration<double, std::milli>(t1 - t0).count();
+    double ms_sort = std::chrono::duration<double, std::milli>(t2 - t1).count();
+    std::printf("    [timing] n=100000 k=10: top_k %.3f ms, std::sort %.3f ms\n", ms_heap, ms_sort);
+}
 
+TEST(heap_top_k_counts_comparisons) {
+    std::mt19937 rng(7);
+    std::vector<int> v(10000);
+    for (int& x : v) x = static_cast<int>(rng());
+    std::size_t cmp = 0;
+    auto less = [&cmp](int a, int b) { ++cmp; return a < b; };
+    top_k(v, 5, less);
+    CHECK(cmp < 10000u * 6);   
+}
 
-
-
+// lru
 
 
 
