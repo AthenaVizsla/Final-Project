@@ -65,14 +65,25 @@ public:
     //   (counting one eviction), then inserts the new entry as most recently
     //   used. With capacity 0, does nothing.
     void put(const Key& key, Value value) {
-        // TODO
-        // Clue (eviction): victim = tail_; unlink it; erase victim->key from
-        // the map; THEN delete victim. Reading victim->key after delete is a
-        // heap-use-after-free (ASan may show it as a SEGV inside hashtable
-        // code: look for the first stack frame in lru_cache.h).
-        // Clue: create nodes with  new Node{key, std::move(value), nullptr, nullptr}.
-        (void)key;
-        (void)value;
+        if(capacity_ == 0){
+            return;
+        }
+        auto it = map_.find(key);
+        if (it != map_.end()){
+            it->second->value = std::move(value);
+            move_to_front(it->second);
+            return;
+        }
+        if (map_.size() >= capacity_){
+            Node* victim = tail_;
+            unlink(victim);
+            map_.erase(victim->key);
+            delete victim;
+            ++stats_.evictions;
+        }
+        Node* node = new Node{key, std::move(value), nullptr, nullptr};
+        push_front(node);
+        map_[key] = node;
     }
 
     // True if the key is cached. Does NOT change recency or stats.
@@ -82,17 +93,27 @@ public:
 
     // Removes the key if present (not an eviction). Returns whether it was.
     bool erase(const Key& key) {
-        // TODO
-        (void)key;
-        return false;
+        auto it = map_.find(key);
+        if (it == map_.end()){
+            return false;
+        }
+        Node* node = it->second;
+        unlink(node);
+        map_.erase(it);
+        delete node;
+        return true;
     }
 
     // Removes every entry. Stats are kept.
     void clear() {
-        // TODO: delete every node, empty the map, reset head_/tail_.
-        // Clue: save n->next in a local BEFORE  delete n;  a loop like
-        //   for (Node* n = head_; n; n = n->next) delete n;
-        // reads n->next from freed memory.
+        Node* n = head_;
+        while (n != nullptr){
+            Node* next = n->next;
+            delete n;
+            n = next;
+        }
+        head_ = tail_ = nullptr;
+        map_.clear();
     }
 
     std::size_t size() const noexcept { return map_.size(); }
