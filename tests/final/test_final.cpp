@@ -263,6 +263,109 @@ TEST(heap_top_k_counts_comparisons) {
 }
 
 // lru
+TEST(lru_put_existing_updates_without_evicting) {
+    LruCache<std::string, int> c(2);
+    c.put("a", 1);
+    c.put("b", 2);
+    c.put("a", 10);                                   // update + refresh
+    CHECK_EQ(c.size(), std::size_t{2});
+    CHECK_EQ(c.stats().evictions, std::size_t{0});
+    CHECK_EQ(c.stats().hits + c.stats().misses, std::size_t{0});
+    CHECK_EQ(c.keys_mru_to_lru(), (std::vector<std::string>{"a", "b"}));
+    REQUIRE(c.get("a") != nullptr);
+    CHECK_EQ(*c.get("a"), 10);
+}
+
+TEST(lru_capacity_zero_and_one) {
+    LruCache<int, int> z(0);
+    z.put(1, 1);
+    CHECK_EQ(z.size(), std::size_t{0});
+    CHECK(z.get(1) == nullptr);
+    CHECK_EQ(z.stats().misses, std::size_t{1});
+
+    LruCache<int, int> o(1);
+    o.put(1, 10);
+    o.put(2, 20);                                     // evicts 1
+    CHECK(!o.contains(1));
+    CHECK(o.contains(2));
+    CHECK_EQ(o.stats().evictions, std::size_t{1});
+    CHECK_EQ(o.keys_mru_to_lru(), (std::vector<int>{2}));
+    CHECK(o.erase(2));
+    CHECK_EQ(o.size(), std::size_t{0});
+    o.put(3, 30);                                     // list is reusable after emptying
+    CHECK_EQ(o.keys_mru_to_lru(), (std::vector<int>{3}));
+}
+
+TEST(lru_erase_head_middle_tail) {
+    LruCache<int, int> c(5);
+    for (int i = 1; i <= 5; ++i) c.put(i, i);         // MRU..LRU: 5 4 3 2 1
+    CHECK(c.erase(5));                                // head
+    CHECK_EQ(c.keys_mru_to_lru(), (std::vector<int>{4, 3, 2, 1}));
+    CHECK(c.erase(3));                                // middle
+    CHECK_EQ(c.keys_mru_to_lru(), (std::vector<int>{4, 2, 1}));
+    CHECK(c.erase(1));                                // tail
+    CHECK_EQ(c.keys_mru_to_lru(), (std::vector<int>{4, 2}));
+    CHECK(!c.erase(99));
+    c.put(7, 7);
+    c.put(8, 8);
+    c.put(9, 9);                                      // full (5) after this; tail still valid
+    CHECK_EQ(c.keys_mru_to_lru(), (std::vector<int>{9, 8, 7, 4, 2}));
+    c.put(10, 10);                                    // evicts 2
+    CHECK_EQ(c.keys_mru_to_lru(), (std::vector<int>{10, 9, 8, 7, 4}));
+}
+
+TEST(lru_stats_contains_clear) {
+    LruCache<int, int> c(2);
+    c.put(1, 1);
+    c.put(2, 2);
+    CHECK(c.get(1) != nullptr);        // hit
+    CHECK(c.get(3) == nullptr);        // miss
+    CHECK(c.contains(2));              // no effect on stats or recency
+    CHECK_EQ(c.keys_mru_to_lru(), (std::vector<int>{1, 2}));
+    c.put(3, 3);                       // evicts 2
+    auto st = c.stats();
+    CHECK_EQ(st.hits, std::size_t{1});
+    CHECK_EQ(st.misses, std::size_t{1});
+    CHECK_EQ(st.evictions, std::size_t{1});
+    c.clear();
+    CHECK_EQ(c.size(), std::size_t{0});
+    CHECK_EQ(c.stats().hits, std::size_t{1});   // stats kept
+    c.put(5, 5);
+    CHECK_EQ(c.keys_mru_to_lru(), (std::vector<int>{5}));
+}
+
+TEST(lru_matches_reference_model) {
+    // Compare against a naive vector-based model on random operations.
+    std::mt19937 rng(99);
+    const std::size_t cap = 8;
+    LruCache<int, int> c(cap);
+    std::vector<std::pair<int, int>> model;   // front = MRU
+    for (int step = 0; step < 20000; ++step) {
+        int key = static_cast<int>(rng() % 20);
+        if (rng() % 2 == 0) {
+            const int* got = c.get(key);
+            auto it = model.begin();
+            while (it != model.end() && it->first != key) ++it;
+            if (it == model.end()) {
+                CHECK(got == nullptr);
+            } else {
+                REQUIRE(got != nullptr);
+                CHECK_EQ(*got, it->second);
+                auto e = *it; model.erase(it); model.insert(model.begin(), e);
+            }
+        } else {
+            c.put(key, step);
+            auto it = model.begin();
+            while (it != model.end() && it->first != key) ++it;
+            if (it != model.end()) model.erase(it);
+            else if (model.size() == cap) model.pop_back();
+            model.insert(model.begin(), {key, step});
+        }
+    }
+    std::vector<int> keys;
+    for (auto& kv : model) keys.push_back(kv.first);
+    CHECK_EQ(c.keys_mru_to_lru(), keys);
+}
 
 
 
